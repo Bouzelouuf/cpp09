@@ -11,7 +11,7 @@ all: $(NAME)
 $(NAME): $(OBJS)
 	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
 
-%.o: %.cpp RPN.hpp
+%.o: %.cpp PmergeMe.hpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
