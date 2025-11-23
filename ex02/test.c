@@ -4,21 +4,21 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/select.h>
-#include <netdb.h>
-#include <netinet/in.h>
+#include <stdint.h>
+#include <netinet/in.h> 
 
-typedef struct t_clients
+typedef struct s_clients
 {
     int id;
     char msg[1024];
-}   s_clients;
+}   t_clients;
 
 fd_set readfds, writefds, active;
-int fdMax = 0;
-int idNext = 0;
 char bufferRead[12000];
 char bufferWrite[12000];
 t_clients clients[1024];
+int fdMax = 0;
+int idNext = 0;
 
 void ftError(char *str)
 {
@@ -34,17 +34,17 @@ void sendAll(int not)
 {
     for (int i = 0; i <= fdMax; i++)
     {
-        if (FD_ISSET(i, &readfds) && i != not)
+        if (FD_ISSET(i, &writefds) && i != not)
             send(i, bufferWrite, strlen(bufferWrite), 0);
     }
 }
 
-int main(int ac, char **av)
+int main(int ac, char**av)
 {
     if (ac != 2)
         ftError("Wrong number of arguments");
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0)
+    if (sockfd <= 0)
         ftError(NULL);
     FD_ZERO(&active);
     bzero(&clients, sizeof(clients));
@@ -52,15 +52,16 @@ int main(int ac, char **av)
     FD_SET(sockfd, &active);
     struct sockaddr_in servaddr;
     socklen_t len;
+    bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.adrr = 0x0100007F;
+    servaddr.sin_addr.s_addr = 0x0100007F;
     uint16_t port = atoi(av[1]);
     servaddr.sin_port = ((port &0xFF) << 8) | ((port >> 8) &0xFF);
-    if (bind(sockfd, (const struct sockaddr*) &servaddr, sizeof(servaddr)) < 0)
+    if (bind(sockfd, (const struct sockaddr*)&servaddr, sizeof(servaddr)) < 0)
         ftError(NULL);
     if (listen(sockfd, 10) < 0)
         ftError(NULL);
-    while(1)
+    while (1)
     {
         readfds = writefds = active;
         if (select(fdMax + 1, &readfds, &writefds, NULL, NULL) < 0)
@@ -70,26 +71,26 @@ int main(int ac, char **av)
             if (FD_ISSET(fdI, &readfds) && fdI == sockfd)
             {
                 len = sizeof(servaddr);
-                int connfd = accept(sockfd, (struct sockaddr_in*)&servaddr, &len);
+                int connfd = accept(sockfd, (struct sockaddr*) &servaddr, &len);
                 if (connfd < 0)
                     continue;
                 fdMax = connfd > fdMax ? connfd : fdMax;
                 clients[connfd].id = idNext++;
-                FD_SET(connfd, &active);
-                sprintf("bla %d",clients[connfd].id);
+                sprintf(bufferWrite, "server: client %d just arrived\n", clients[connfd].id);
                 sendAll(connfd);
+                FD_SET(connfd, &active);
                 break;
             }
             if (FD_ISSET(fdI, &readfds) && fdI != sockfd)
             {
-                int res = recv(sockfd, bufferRead, 65536);
+                int res = recv(fdI, bufferRead,65536, 0);
                 if (res <= 0)
                 {
-                    sprintf(bufferRead, "clients %d: %s",clients[fdI].id, clients[fdI].msg);
+                    sprintf(bufferWrite,"server: client %d just left\n",clients[fdI].id);
                     sendAll(fdI);
                     FD_CLR(fdI, &active);
                     close(fdI);
-                    break
+                    break;
                 }
                 else
                 {
@@ -99,15 +100,18 @@ int main(int ac, char **av)
                         {
                             if (strlen(clients[fdI].msg) > 0)
                             {
-
+                                sprintf(bufferWrite,"client %d: %s\n", clients[fdI].id ,clients[fdI].msg);
+                                sendAll(fdI);
                             }
+                            memset(clients[fdI].msg, 0, sizeof(clients[fdI].msg));
                         }
                         else
                         {
-                            int len = strlen(clients[fdI])
+                            len = strlen(clients[fdI].msg);
+                            if (len < 1023)
                             {
-                                clients[fdI].msg[i] = bufferRead[i];
-                                clients[fdI].msg[i + 1] = '\0';
+                                clients[fdI].msg[len] = bufferRead[i];
+                                clients[fdI].msg[len + 1] = '\0';
                             }
                         }
                     }
@@ -117,5 +121,3 @@ int main(int ac, char **av)
         }
     }
 }
-
-
